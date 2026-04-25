@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>几何画板 Pro - 函数与图形绘制工具</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { width: 100%; height: 100%; overflow: hidden; }
+  body { width: 100%; height: 100%; overflow: hidden; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; display: block; }
+
+  #app { display: flex; width: 100%; height: 100vh; overflow: hidden; position: fixed; inset: 0; }
+
+  #canvas-area { flex: 1; height: 100vh; position: relative; overflow: hidden; background: #f8fafc; }
+  canvas { display: block; cursor: crosshair; }
+  #watermark {
+    position: fixed; bottom: 12px; right: 316px; font-size: 12px; color: rgba(100,116,139,0.35);
+    font-family: sans-serif; pointer-events: none; z-index: 10; user-select: none; letter-spacing: 0.5px;
+  }
+  #upgrade-banner {
+    position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff; padding: 8px 20px; border-radius: 24px; font-size: 13px; font-weight: 600;
+    z-index: 20; display: flex; align-items: center; gap: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+  }
+  #upgrade-banner:hover { transform: translateX(-50%) scale(1.04); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+  #upgrade-banner .badge { background: #f59e0b; color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+
+  #panel { width: 300px; min-width: 300px; height: 100vh; display: flex; flex-direction: column; background: #fff; border-left: 1px solid #e2e8f0; box-shadow: -2px 0 12px rgba(0,0,0,0.08); overflow: hidden; z-index: 5; }
+  #panel-header { padding: 12px 16px; background: linear-gradient(135deg, #1e293b, #334155); color: #fff; font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+  #panel-body { flex: 1; overflow-y: auto; }
+  #panel-footer { padding: 10px 16px; background: #f8fafc; border-top: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8; flex-shrink: 0; }
+
+  .section { padding: 12px 14px 6px; }
+  .section-title { font-weight: 600; font-size: 12px; color: #475569; margin-bottom: 8px; display: flex; align-items: center; gap: 4px; }
+  .section-badge { font-size: 10px; padding: 1px 5px; border-radius: 8px; font-weight: 600; }
+  .badge-trial { background: #fef3c7; color: #d97706; }
+  .badge-pro { background: #d1fae5; color: #059669; }
+
+  /* Inputs: accept text for math expressions */
+  input[type=text], input[type=number], select {
+    border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px 8px;
+    font-size: 12px; outline: none; background: #fff; color: #1e293b;
+    transition: border-color 0.15s; font-family: inherit;
+  }
+  input:focus { border-color: #3b82f6; }
+  input.w-name { width: 62px; }
+  input.w-expr { width: 70px; font-family: 'Cambria Math', 'STIX Two Math', 'Times New Roman', serif; font-size: 13px; }
+  input.w-param { width: 62px; font-family: 'Cambria Math', 'STIX Two Math', 'Times New Roman', serif; font-size: 13px; }
+  input.w-coord { width: 70px; font-family: 'Cambria Math', 'STIX Two Math', 'Times New Roman', serif; font-size: 13px; }
+  select.w-sel { flex: 1; min-width: 50px; font-size: 12px; }
+
+  /* Syntax highlight hint */
+  .expr-hint { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+
+  .btn { border: none; border-radius: 6px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.15s, transform 0.1s; }
+  .btn:active { transform: scale(0.96); }
+  .btn:hover { opacity: 0.85; }
+  .btn-blue { background: #3b82f6; color: #fff; }
+  .btn-green { background: #10b981; color: #fff; }
+  .btn-red { background: #ef4444; color: #fff; }
+  .btn-purple { background: #8b5cf6; color: #fff; }
+  .btn-orange { background: #f97316; color: #fff; }
+  .btn-gray { background: #64748b; color: #fff; }
+  .btn-full { width: 100%; padding: 8px 0; margin-top: 4px; }
+  .error-msg { color: #ef4444; font-size: 11px; margin-top: 2px; min-height: 16px; }
+  .success-msg { color: #10b981; font-size: 11px; margin-top: 2px; min-height: 16px; }
+
+  .list-area { padding: 2px 14px 6px; max-height: 180px; overflow-y: auto; }
+  .pt-card, .seg-card, .fn-card, .circ-card {
+    display: flex; align-items: center; border-radius: 6px; padding: 5px 8px; margin-bottom: 4px; gap: 4px; flex-wrap: wrap;
+  }
+  .pt-card { background: #eff6ff; }
+  .seg-card { background: #fff5f5; }
+  .fn-card { background: #f5f0ff; }
+  .circ-card { background: #fff8f0; }
+  .card-name { font-weight: 700; font-size: 12px; min-width: 20px; }
+  .card-name-blue { color: #1d4ed8; }
+  .card-name-red { color: #dc2626; }
+  .card-name-purple { color: #7c3aed; }
+  .card-name-orange { color: #ea580c; }
+  .card-info { font-size: 11px; color: #64748b; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'Cambria Math', 'STIX Two Math', 'Times New Roman', serif; }
+  .icon-btn { background: none; border: none; cursor: pointer; font-size: 13px; padding: 0 2px; color: #94a3b8; line-height: 1; }
+  .icon-btn:hover { color: #ef4444; }
+  .icon-btn.edit:hover { color: #3b82f6; }
+  .divider { border-top: 1px solid #f1f5f9; margin: 4px 14px; }
+
+  .param-row { display: flex; gap: 4px; margin-bottom: 3px; align-items: center; flex-wrap: wrap; }
+  .param-label { font-size: 11px; color: #64748b; min-width: 14px; }
+  .fn-type-btn { border: 1px solid #cbd5e1; background: #fff; border-radius: 4px; padding: 3px 8px; font-size: 11px; cursor: pointer; color: #475569; }
+  .fn-type-btn.active { background: #8b5cf6; color: #fff; border-color: #8b5cf6; }
+
+  .action-row { display: flex; gap: 4px; margin-top: 4px; }
+  ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
+
+  .toast {
+    position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: #1e293b; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 13px;
+    z-index: 100; opacity: 0; transition: opacity 0.3s, transform 0.3s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  #export-btn { position: fixed; bottom: 12px; left: 12px; z-index: 20; }
+
+  /* Point label on canvas - using math font */
+  .pt-label { font-family: 'Cambria Math', 'STIX Two Math', 'Times New Roman', serif; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="canvas-area">
+    <canvas id="main-canvas"></canvas>
+  </div>
+  <div id="watermark">几何画板 Pro · 体验版</div>
+  <div id="upgrade-banner" onclick="showUpgradeModal()">
+    <span>升级专业版，解锁全部功能</span>
+    <span class="badge">限时 ¥9/月</span>
+  </div>
+
+  <div id="panel">
+    <div id="panel-header">
+      <span style="font-size:18px">📐</span>
+      <span>几何画板 Pro</span>
+      <span id="version-tag" class="section-badge badge-trial" style="margin-left:auto">体验版</span>
+    </div>
+    <div id="panel-body">
+
+      <!-- Points -->
+      <div class="section">
+        <div class="section-title">📍 添加点</div>
+        <div class="param-row">
+          <input class="w-name" type="text" id="pt-name" placeholder="名称" />
+          <input class="w-coord" type="text" id="pt-x" placeholder="x (如 √2)" />
+          <input class="w-coord" type="text" id="pt-y" placeholder="y (如 1/2)" />
+          <button class="btn btn-blue" onclick="addPoint()">添加</button>
+        </div>
+        <div class="expr-hint">支持：分数 1/2、根号 √2、π、常数运算如 √3+1</div>
+        <div class="error-msg" id="pt-error"></div>
+      </div>
+      <div class="list-area" id="pt-list"></div>
+      <div class="divider"></div>
+
+      <!-- Segments -->
+      <div class="section">
+        <div class="section-title">📏 线段</div>
+        <div class="param-row">
+          <input class="w-name" type="text" id="seg-name" placeholder="名称" />
+          <select class="w-sel" id="seg-a"><option value="">端A</option></select>
+          <select class="w-sel" id="seg-b"><option value="">端B</option></select>
+        </div>
+        <button class="btn btn-red btn-full" onclick="addSegment()">添加线段</button>
+        <div class="error-msg" id="seg-error"></div>
+      </div>
+      <div class="list-area" id="seg-list"></div>
+      <div class="divider"></div>
+
+      <!-- Functions -->
+      <div class="section">
+        <div class="section-title">
+          📈 函数图像
+          <span class="section-badge badge-trial" id="fn-count-badge">0/2</span>
+        </div>
+        <div style="display:flex; gap:4px; margin-bottom:6px; flex-wrap:wrap;">
+          <button class="fn-type-btn active" id="fn-btn-linear" onclick="setFnType('linear')">一次函数</button>
+          <button class="fn-type-btn" id="fn-btn-quadratic" onclick="setFnType('quadratic')">二次函数</button>
+          <button class="fn-type-btn" id="fn-btn-trig" onclick="setFnType('trig')">三角函数</button>
+        </div>
+
+        <!-- Linear: y = kx + b -->
+        <div id="fn-panel-linear">
+          <div class="param-row">
+            <span class="param-label">y =</span>
+            <input class="w-param" type="text" id="fn-k" placeholder="k" value="1" />
+            <span class="param-label">x +</span>
+            <input class="w-param" type="text" id="fn-b" placeholder="b" value="0" />
+          </div>
+          <div class="param-row">
+            <input class="w-name" type="text" id="fn-name-linear" placeholder="名称" value="一次函数" />
+          </div>
+          <button class="btn btn-purple" style="width:100%" onclick="addFunction('linear')">绘制</button>
+        </div>
+
+        <!-- Quadratic: y = ax² + bx + c -->
+        <div id="fn-panel-quadratic" style="display:none">
+          <div class="param-row">
+            <span class="param-label">y =</span>
+            <input class="w-param" type="text" id="fn-a" placeholder="a" value="1" />
+            <span class="param-label">x² +</span>
+            <input class="w-param" type="text" id="fn-b2" placeholder="b" value="0" />
+            <span class="param-label">x +</span>
+            <input class="w-param" type="text" id="fn-c" placeholder="c" value="0" />
+          </div>
+          <div class="param-row">
+            <input class="w-name" type="text" id="fn-name-quadratic" placeholder="名称" value="二次函数" />
+          </div>
+          <button class="btn btn-purple" style="width:100%" onclick="addFunction('quadratic')">绘制</button>
+        </div>
+
+        <!-- Trig: y = A·trig(kx+φ) -->
+        <div id="fn-panel-trig" style="display:none">
+          <div class="param-row">
+            <span class="param-label">y =</span>
+            <input class="w-param" type="text" id="fn-A" placeholder="A" value="1" />
+            <select id="fn-trig-type" style="width:56px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;padding:4px;">
+              <option value="sin">sin</option>
+              <option value="cos">cos</option>
+              <option value="tan">tan</option>
+            </select>
+            <span class="param-label">(</span>
+            <input class="w-param" type="text" id="fn-k2" placeholder="k" value="1" />
+            <span class="param-label">x +</span>
+            <input class="w-param" type="text" id="fn-phi" placeholder="φ" value="0" />
+            <span class="param-label">)</span>
+          </div>
+          <div class="param-row">
+            <input class="w-name" type="text" id="fn-name-trig" placeholder="名称" value="三角函数" />
+          </div>
+          <button class="btn btn-purple" style="width:100%" onclick="addFunction('trig')">绘制</button>
+        </div>
+        <div class="error-msg" id="fn-error"></div>
+      </div>
+      <div class="list-area" id="fn-list"></div>
+      <div class="divider"></div>
+
+      <!-- Circles -->
+      <div class="section">
+        <div class="section-title">
+          ⭕ 圆
+          <span class="section-badge badge-trial" id="circ-count-badge">0/1</span>
+        </div>
+        <div class="param-row">
+          <select class="w-sel" id="circ-center"><option value="">圆心</option></select>
+          <input class="w-coord" type="text" id="circ-r" placeholder="半径 r (如 √2)" value="2" />
+          <input class="w-name" type="text" id="circ-name" placeholder="名称" value="圆" />
+        </div>
+        <div class="expr-hint">支持：整数、小数、分数、根号</div>
+        <button class="btn btn-orange btn-full" onclick="addCircle()">绘制圆</button>
+        <div class="error-msg" id="circ-error"></div>
+      </div>
+      <div class="list-area" id="circ-list"></div>
+
+    </div>
+    <div id="panel-footer">
+      拖拽蓝点移动 · 拖空白处平移 · 滚轮缩放 · <span id="limit-info" style="color:#d97706">体验版：5点/3线段/2函数/1圆</span>
+    </div>
+  </div>
+</div>
+
+<button class="btn btn-gray" id="export-btn" onclick="exportImage()">📷 导出图片</button>
+<div id="toast" class="toast"></div>
+
+<script>
+// ============================================================
+//  Math Expression Parser
+//  Supports: numbers, fractions (1/2), square roots (sqrt(2), √2, √3),
+//            pi (π, pi), and basic operations (+, -, *, /, parentheses)
+// ============================================================
+const MathExpr = {
+  // Convert expression string to numeric value
+  eval(expr) {
+    if (expr === null || expr === undefined || expr === '') return NaN;
+    const s = String(expr).trim();
+    if (s === '') return NaN;
+    try {
+      // Normalize: replace Unicode sqrt/pi with ASCII equivalents
+      let normalized = s
+        .replace(/√/g, 'sqrt(')           // √2 → sqrt(2) — needs special handling
+        .replace(/π/g, 'pi')
+        .replace(/φ|ϕ/g, 'phi')
+        .replace(/∞/g, 'Infinity');
+
+      // Replace fraction patterns: (a)/(b) or a/(b) or a/b at word boundaries
+      // Pattern: number/anything where anything doesn't contain /
+      normalized = normalized.replace(/(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)(?![/\d])/g, '($1/$2)');
+
+      // Handle standalone √N (not inside parens already handled above)
+      // e.g. "√2+1" → "sqrt(2)+1"
+      normalized = normalized.replace(/√(\d+(?:\.\d+)?)/g, 'sqrt($1)');
+      normalized = normalized.replace(/√\(([^)]+)\)/g, 'sqrt($1)');
+
+      const PI = Math.PI;
+      const E = Math.E;
+      const PHI = (1 + Math.sqrt(5)) / 2; // Golden ratio φ
+
+      // eslint-disable-next-line no-new-func
+      const result = new Function('Math', 'pi', 'e', 'phi', `return (${normalized})`)
+        (Math, PI, E, PHI);
+
+      return (typeof result === 'number' && isFinite(result)) ? result : NaN;
+    } catch (e) {
+      return NaN;
+    }
+  },
+
+  // Pretty display string for a math expression
+  display(expr, maxLen = 12) {
+    if (expr === null || expr === undefined) return '?';
+    const s = String(expr).trim();
+    if (s === '') return '';
+    // Already pretty, return as-is for short strings
+    if (s.length <= maxLen && !s.match(/[a-z]/)) return s;
+    // Try to convert to number and format nicely
+    const n = this.eval(s);
+    if (!isNaN(n) && isFinite(n)) {
+      // Round to avoid floating point noise
+      const rounded = Math.round(n * 1e10) / 1e10;
+      const str = String(rounded);
+      if (str.length <= maxLen + 2) return str;
+      // Too long, show approximate
+      return n.toFixed(4).replace(/\.?0+$/, '');
+    }
+    // Show simplified form
+    return s.replace(/sqrt\(/g, '√').replace(/\)/g, '').substring(0, maxLen);
+  },
+
+  // Format a number for display, trying to show nice symbolic forms
+  formatNum(n) {
+    if (!isFinite(n) || isNaN(n)) return '?';
+    const abs = Math.abs(n);
+    const PI = Math.PI;
+    // Check common pi multiples
+    const piFracs = [
+      ['', 1], ['π', PI], ['π/2', PI/2], ['π/3', PI/3], ['π/4', PI/4],
+      ['π/6', PI/6], ['2π', 2*PI], ['3π', 3*PI], ['-π', -PI],
+      ['-π/2', -PI/2], ['-π/4', -PI/4], ['-π/6', -PI/6],
+      ['2π/3', 2*PI/3], ['3π/4', 3*PI/4], ['4π/3', 4*PI/3],
+    ];
+    for (const [label, val] of piFracs) {
+      if (Math.abs(n - val) < 1e-9) return label || '0';
+    }
+    // Check sqrt(2), sqrt(3) multiples
+    const sqrt2 = Math.SQRT2, sqrt3 = Math.sqrt(3);
+    const sqrtFracs = [
+      ['√2', sqrt2], ['√3', sqrt3], ['2√2', 2*sqrt2], ['2√3', 2*sqrt3],
+      ['√2/2', sqrt2/2], ['√3/2', sqrt3/2], ['√3/3', sqrt3/3],
+      ['-√2', -sqrt2], ['-√3', -sqrt3], ['-√2/2', -sqrt2/2],
+      ['-√3/2', -sqrt3/2],
+    ];
+    for (const [label, val] of sqrtFracs) {
+      if (Math.abs(n - val) < 1e-9) return label;
+    }
+    // Check 1/3, 1/6 etc
+    const fracTests = [1/3, 1/6, 2/3, 5/6, 1/4, 3/4, 1/8, 3/8, 5/8, 7/8];
+    for (const f of fracTests) {
+      if (Math.abs(abs - f) < 1e-9) {
+        const num = this._fracNum(f), den = this._fracDen(f);
+        return (n < 0 ? '-' : '') + (den === 1 ? num : `${num}/${den}`);
+      }
+    }
+    // Check common integers
+    if (Math.abs(abs - Math.round(abs)) < 1e-9 && abs < 1e6) return String(Math.round(n));
+    // Default: fixed decimal
+    const str = n.toFixed(4).replace(/\.?0+$/, '');
+    return str;
+  },
+
+  _fracNum(f) {
+    // Find numerator of simplified fraction
+    for (let i = 1; i <= 12; i++) {
+      if (Math.abs(f - i/Math.round(i/f)) < 1e-9) return i;
+      if (Math.abs(f * i - Math.round(f * i)) < 1e-9) return Math.round(f * i);
+    }
+    return Math.round(f * 12);
+  },
+
+  _fracDen(f) {
+    for (let i = 1; i <= 12; i++) {
+      if (Math.abs(f * i - Math.round(f * i)) < 1e-9) return Math.round(i);
+    }
+    return Math.round(1/f);
+  },
+
+  // Validate expression and return error message if invalid
+  validate(expr) {
+    const s = String(expr).trim();
+    if (s === '') return '不能为空';
+    const n = this.eval(s);
+    if (isNaN(n) || !isFinite(n)) return `无法解析：${s}`;
+    return null; // valid
+  }
+};
+
+// ============================================================
+//  State
+// ============================================================
+let points = [
+  { id: 'p1', name: 'A', xExpr: '√2',  x: MathExpr.eval('√2'),  yExpr: 'π/2', y: MathExpr.eval('π/2') },
+  { id: 'p2', name: 'B', xExpr: '-√3', x: MathExpr.eval('-√3'), yExpr: '1/3',  y: MathExpr.eval('1/3')  },
+];
+let segments = [];
+let functions = [];
+let circles = [];
+let pidCounter = 2, sidCounter = 0, fidCounter = 0, cidCounter = 0;
+
+const IS_PRO = false;
+const TRIAL_LIMITS = { maxPoints: 5, maxSegments: 3, maxFunctions: 2, maxCircles: 1 };
+
+// ============================================================
+//  Canvas Setup
+// ============================================================
+const canvas = document.getElementById('main-canvas');
+const ctx = canvas.getContext('2d');
+const canvasArea = document.getElementById('canvas-area');
+
+let GRID = 60, offsetX = 0, offsetY = 0;
+const MIN_GRID = 20, MAX_GRID = 200;
+
+function toCanvas(mx, my) {
+  const cx = canvas.width / 2 + offsetX, cy = canvas.height / 2 + offsetY;
+  return [cx + mx * GRID, cy - my * GRID];
+}
+function toMath(px, py) {
+  const cx = canvas.width / 2 + offsetX, cy = canvas.height / 2 + offsetY;
+  return [(px - cx) / GRID, (cy - py) / GRID];
+}
+
+function resizeCanvas() {
+  const rect = canvasArea.getBoundingClientRect();
+  let w = Math.floor(rect.width), h = Math.floor(rect.height);
+  if (w <= 0 || h <= 0) { w = Math.max(window.innerWidth - 300, 400); h = Math.max(window.innerHeight, 300); }
+  canvas.width = w; canvas.height = h;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  draw();
+}
+window.addEventListener('resize', resizeCanvas);
+new ResizeObserver(resizeCanvas).observe(canvasArea);
+setTimeout(resizeCanvas, 0);
+
+// ============================================================
+//  Drawing
+// ============================================================
+function draw() {
+  const W = canvas.width, H = canvas.height;
+  if (!W || !H) return;
+  const cx = W / 2 + offsetX, cy = H / 2 + offsetY;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, W, H);
+
+  // Grid
+  const iX0 = Math.floor((0 - cx) / GRID) - 1, iX1 = Math.ceil((W - cx) / GRID) + 1;
+  const iY0 = Math.floor((cy - H) / GRID) - 1, iY1 = Math.ceil(cy / GRID) + 1;
+  for (let i = iX0; i <= iX1; i++) {
+    const px = cx + i * GRID;
+    ctx.strokeStyle = i === 0 ? '#94a3b8' : '#e2e8f0';
+    ctx.lineWidth = i === 0 ? 1.5 : 0.8;
+    ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, H); ctx.stroke();
+  }
+  for (let j = iY0; j <= iY1; j++) {
+    const py = cy - j * GRID;
+    ctx.strokeStyle = j === 0 ? '#94a3b8' : '#e2e8f0';
+    ctx.lineWidth = j === 0 ? 1.5 : 0.8;
+    ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(W, py); ctx.stroke();
+  }
+
+  // Arrows
+  ctx.fillStyle = '#475569';
+  ctx.beginPath(); ctx.moveTo(W - 2, cy); ctx.lineTo(W - 14, cy - 5); ctx.lineTo(W - 14, cy + 5); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx, 2); ctx.lineTo(cx - 5, 14); ctx.lineTo(cx + 5, 14); ctx.fill();
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillStyle = '#475569';
+  ctx.fillText('x', W - 12, cy - 12);
+  ctx.fillText('y', cx + 12, 16);
+  ctx.font = '12px sans-serif'; ctx.fillText('O', cx + 5, cy + 16);
+
+  // Ticks with smart labels
+  ctx.font = '11px sans-serif';
+  for (let i = iX0; i <= iX1; i++) {
+    if (i === 0) continue;
+    const px = cx + i * GRID;
+    ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px, cy - 4); ctx.lineTo(px, cy + 4); ctx.stroke();
+    ctx.fillStyle = '#64748b';
+    ctx.fillText(MathExpr.formatNum(i), px - (Math.abs(i) >= 10 ? 7 : 4), cy + 15);
+  }
+  for (let j = iY0; j <= iY1; j++) {
+    if (j === 0) continue;
+    const py = cy - j * GRID;
+    ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cx - 4, py); ctx.lineTo(cx + 4, py); ctx.stroke();
+    ctx.fillStyle = '#64748b';
+    const label = MathExpr.formatNum(j);
+    ctx.fillText(label, cx + 8, py + 4);
+  }
+
+  // Functions (behind everything)
+  for (const fn of functions) drawFunction(fn);
+
+  // Circles
+  for (const circ of circles) drawCircle(circ);
+
+  // Segments
+  for (const seg of segments) {
+    const a = points.find(p => p.id === seg.pointAId), b = points.find(p => p.id === seg.pointBId);
+    if (!a || !b) continue;
+    const [ax, ay] = toCanvas(a.x, a.y), [bx, by] = toCanvas(b.x, b.y);
+    ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    // Length display — try to show symbolically
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len = Math.sqrt(dx*dx + dy*dy);
+    ctx.fillStyle = '#dc2626'; ctx.font = 'italic bold 12px sans-serif';
+    const midX = (ax + bx) / 2 + 6, midY = (ay + by) / 2 - 4;
+    // Try symbolic length first
+    let lenStr = MathExpr.formatNum(len);
+    // If it's not a nice number, also show decimal hint
+    ctx.fillText(seg.name + ': ' + lenStr, midX, midY);
+  }
+
+  // Points
+  const R = 7;
+  for (const pt of points) {
+    const [px, py] = toCanvas(pt.x, pt.y);
+    // Skip if way off screen
+    if (px < -50 || px > W + 50 || py < -50 || py > H + 50) continue;
+    ctx.beginPath(); ctx.arc(px, py, R, 0, Math.PI * 2);
+    ctx.fillStyle = dragging === pt.id ? '#1d4ed8' : '#3b82f6';
+    ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+    // Label: show live coords when dragging, otherwise original expression
+    const isDraggingThis = dragging === pt.id;
+    const xStr = isDraggingThis
+      ? MathExpr.formatNum(pt.x)
+      : (pt.xExpr !== undefined ? MathExpr.display(pt.xExpr, 8) : MathExpr.formatNum(pt.x));
+    const yStr = isDraggingThis
+      ? MathExpr.formatNum(pt.y)
+      : (pt.yExpr !== undefined ? MathExpr.display(pt.yExpr, 8) : MathExpr.formatNum(pt.y));
+
+    // Draw label background for better readability during drag
+    if (isDraggingThis) {
+      const label = pt.name + '(' + xStr + ', ' + yStr + ')';
+      ctx.font = 'bold 12px sans-serif';
+      const tw = ctx.measureText(label).width;
+      ctx.fillStyle = 'rgba(59,130,246,0.12)';
+      ctx.fillRect(px + 6, py - 22, tw + 8, 18);
+    }
+    ctx.fillStyle = isDraggingThis ? '#1d4ed8' : '#1e3a8a';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText(pt.name + '(' + xStr + ', ' + yStr + ')', px + 10, py - 8);
+  }
+}
+
+// ---- Draw Function Curves ----
+const FN_COLORS = ['#8b5cf6', '#ec4899', '#0891b2', '#d97706', '#059669', '#dc2626'];
+let fnColorIdx = 0;
+function getFnColor() { const c = FN_COLORS[fnColorIdx % FN_COLORS.length]; fnColorIdx++; return c; }
+
+function drawFunction(fn) {
+  const color = fn.color;
+  const samples = 500;
+  const xMin = Math.max(-30, (0 - canvas.width/2 - offsetX) / GRID);
+  const xMax = Math.min(30, (canvas.width - canvas.width/2 - offsetX) / GRID);
+  const step = (xMax - xMin) / samples;
+
+  ctx.strokeStyle = color; ctx.lineWidth = 2.2; ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  let started = false;
+  for (let i = 0; i <= samples; i++) {
+    const mx = xMin + i * step;
+    let my;
+    try { my = evalFn(fn, mx); }
+    catch(e) { started = false; continue; }
+    if (!isFinite(my) || isNaN(my)) { started = false; continue; }
+    const [px, py] = toCanvas(mx, my);
+    if (py < -1000 || py > canvas.height + 1000) { started = false; continue; }
+    if (!started) { ctx.moveTo(px, py); started = true; }
+    else ctx.lineTo(px, py);
+  }
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // Function formula display
+  ctx.fillStyle = color; ctx.font = 'bold 12px sans-serif';
+  ctx.fillText(fn.label, 10, 30 + fnColorIdx * 22);
+}
+
+function evalFn(fn, x) {
+  switch (fn.type) {
+    case 'linear': return fn.k * x + fn.b;
+    case 'quadratic': return fn.a * x * x + fn.b * x + fn.c;
+    case 'trig': {
+      const arg = fn.k * x + fn.phi;
+      switch (fn.trigType) {
+        case 'sin': return fn.A * Math.sin(arg);
+        case 'cos': return fn.A * Math.cos(arg);
+        case 'tan': return fn.A * Math.tan(arg);
+      }
+    }
+  }
+  return NaN;
+}
+
+function fnFormula(fn) {
+  const f = (v, expr) => {
+    const n = MathExpr.eval(expr);
+    if (!isNaN(n)) return MathExpr.formatNum(n);
+    return expr;
+  };
+  switch (fn.type) {
+    case 'linear': return `y = ${f(fn,fn.kExpr)}x + ${f(fn,fn.bExpr)}`;
+    case 'quadratic': return `y = ${f(fn,fn.aExpr)}x² + ${f(fn,fn.bExpr)}x + ${f(fn,fn.cExpr)}`;
+    case 'trig': return `y = ${f(fn,fn.AExpr)}·${fn.trigType}(${f(fn,fn.kExpr)}x + ${f(fn,fn.phiExpr)})`;
+  }
+}
+
+// ---- Draw Circle ----
+function drawCircle(circ) {
+  const pt = points.find(p => p.id === circ.centerId);
+  if (!pt) return;
+  const [cx, cy] = toCanvas(pt.x, pt.y);
+  const r = circ.r * GRID;
+  ctx.strokeStyle = circ.color || '#f97316'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(cx, cy, Math.abs(r), 0, Math.PI * 2); ctx.stroke();
+  // Radius line to rightmost point
+  ctx.strokeStyle = circ.color || '#f97316'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.abs(r), cy); ctx.stroke();
+  ctx.setLineDash([]);
+  // Label
+  ctx.fillStyle = circ.color || '#f97316'; ctx.font = 'bold 12px sans-serif';
+  const rStr = circ.rExpr !== undefined ? MathExpr.display(circ.rExpr, 8) : MathExpr.formatNum(circ.r);
+  ctx.fillText(circ.name + ': r = ' + rStr, cx + Math.abs(r) / 2 + 5, cy - 5);
+}
+
+// ============================================================
+//  Interaction
+// ============================================================
+let dragging = null, panning = false, lastX = 0, lastY = 0;
+
+function hitTest(mx, my) {
+  const R = 14;
+  for (const pt of points) {
+    const [px, py] = toCanvas(pt.x, pt.y);
+    if ((mx - px) ** 2 + (my - py) ** 2 <= R * R) return pt.id;
+  }
+  return null;
+}
+
+canvas.addEventListener('mousedown', e => {
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  const hit = hitTest(x, y);
+  if (hit) { dragging = hit; canvas.style.cursor = 'grabbing'; }
+  else { panning = true; lastX = x; lastY = y; canvas.style.cursor = 'move'; }
+});
+canvas.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  if (dragging) {
+    const [mx, my] = toMath(x, y);
+    const pt = points.find(p => p.id === dragging);
+    if (pt) {
+      // When dragging, update to decimal values but keep expr for display
+      pt.x = Math.round(mx * 1000) / 1000;
+      pt.y = Math.round(my * 1000) / 1000;
+    }
+    draw(); renderPanel();
+  } else if (panning) {
+    offsetX += x - lastX; offsetY += y - lastY; lastX = x; lastY = y;
+    draw();
+  } else {
+    canvas.style.cursor = hitTest(x, y) ? 'grab' : 'crosshair';
+  }
+});
+canvas.addEventListener('mouseup', () => { dragging = null; panning = false; canvas.style.cursor = 'crosshair'; });
+canvas.addEventListener('mouseleave', () => { dragging = null; panning = false; canvas.style.cursor = 'crosshair'; });
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = canvas.getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const oldGrid = GRID;
+  GRID = Math.min(MAX_GRID, Math.max(MIN_GRID, GRID - e.deltaY * 0.05));
+  const scale = GRID / oldGrid;
+  const cw = canvas.width / 2 + offsetX, ch = canvas.height / 2 + offsetY;
+  offsetX = mx - (mx - cw) * scale - canvas.width / 2;
+  offsetY = my - (my - ch) * scale - canvas.height / 2;
+  draw();
+}, { passive: false });
+
+// ============================================================
+//  Trial Mode Helpers
+// ============================================================
+function checkTrialLimits(type) {
+  if (IS_PRO) return { ok: true, msg: '' };
+  switch (type) {
+    case 'point': return points.length >= TRIAL_LIMITS.maxPoints ? { ok: false, msg: `体验版最多${TRIAL_LIMITS.maxPoints}个点，升级后无限` } : { ok: true, msg: '' };
+    case 'segment': return segments.length >= TRIAL_LIMITS.maxSegments ? { ok: false, msg: `体验版最多${TRIAL_LIMITS.maxSegments}条线段` } : { ok: true, msg: '' };
+    case 'function': return functions.length >= TRIAL_LIMITS.maxFunctions ? { ok: false, msg: `体验版最多${TRIAL_LIMITS.maxFunctions}个函数` } : { ok: true, msg: '' };
+    case 'circle': return circles.length >= TRIAL_LIMITS.maxCircles ? { ok: false, msg: `体验版最多${TRIAL_LIMITS.maxCircles}个圆` } : { ok: true, msg: '' };
+  }
+  return { ok: true, msg: '' };
+}
+
+function updateTrialUI() {
+  const isTrial = !IS_PRO;
+  document.getElementById('version-tag').textContent = isTrial ? '体验版' : '专业版';
+  document.getElementById('version-tag').className = 'section-badge ' + (isTrial ? 'badge-trial' : 'badge-pro');
+  document.getElementById('watermark').style.display = isTrial ? 'block' : 'none';
+  document.getElementById('upgrade-banner').style.display = isTrial ? 'flex' : 'none';
+  document.getElementById('limit-info').textContent = isTrial
+    ? `体验版：${TRIAL_LIMITS.maxPoints}点/${TRIAL_LIMITS.maxSegments}线段/${TRIAL_LIMITS.maxFunctions}函数/${TRIAL_LIMITS.maxCircles}圆`
+    : '专业版 · 无限制';
+  document.getElementById('fn-count-badge').textContent = `${functions.length}/${TRIAL_LIMITS.maxFunctions}`;
+  document.getElementById('circ-count-badge').textContent = `${circles.length}/${TRIAL_LIMITS.maxCircles}`;
+}
+
+// ============================================================
+//  Add / Delete
+// ============================================================
+function addPoint() {
+  const limit = checkTrialLimits('point');
+  if (!limit.ok) { toast(limit.msg); return; }
+  const name = document.getElementById('pt-name').value.trim() || 'P' + pidCounter;
+  const xExpr = document.getElementById('pt-x').value.trim();
+  const yExpr = document.getElementById('pt-y').value.trim();
+  const err = document.getElementById('pt-error');
+
+  const xVal = MathExpr.eval(xExpr);
+  if (isNaN(xVal) || !isFinite(xVal)) { err.textContent = 'x坐标无法解析：' + xExpr; return; }
+  const yVal = MathExpr.eval(yExpr);
+  if (isNaN(yVal) || !isFinite(yVal)) { err.textContent = 'y坐标无法解析：' + yExpr; return; }
+
+  err.textContent = '';
+  points.push({ id: 'p' + (++pidCounter), name, xExpr, x: xVal, yExpr, y: yVal });
+  document.getElementById('pt-name').value = '';
+  document.getElementById('pt-x').value = '';
+  document.getElementById('pt-y').value = '';
+  draw(); renderPanel();
+}
+
+function deletePoint(id) {
+  points = points.filter(p => p.id !== id);
+  segments = segments.filter(s => s.pointAId !== id && s.pointBId !== id);
+  circles = circles.filter(c => c.centerId !== id);
+  draw(); renderPanel();
+}
+
+function addSegment() {
+  const limit = checkTrialLimits('segment');
+  if (!limit.ok) { toast(limit.msg); return; }
+  const name = document.getElementById('seg-name').value.trim() || 'S' + sidCounter;
+  const aId = document.getElementById('seg-a').value, bId = document.getElementById('seg-b').value;
+  const err = document.getElementById('seg-error');
+  if (!aId || !bId) { err.textContent = '请选择两端点'; return; }
+  if (aId === bId) { err.textContent = '两端点不能相同'; return; }
+  err.textContent = '';
+  segments.push({ id: 's' + (++sidCounter), name, pointAId: aId, pointBId: bId });
+  document.getElementById('seg-name').value = '';
+  draw(); renderPanel();
+}
+
+function deleteSegment(id) { segments = segments.filter(s => s.id !== id); draw(); renderPanel(); }
+
+function _fnParam(id) {
+  const v = document.getElementById(id).value.trim();
+  const n = MathExpr.eval(v);
+  if (isNaN(n) || !isFinite(n)) return null;
+  return { expr: v, val: n };
+}
+
+function addFunction(type) {
+  const limit = checkTrialLimits('function');
+  if (!limit.ok) { toast(limit.msg); return; }
+  const err = document.getElementById('fn-error');
+  let fn = { id: 'f' + (++fidCounter), type, color: getFnColor() };
+
+  switch (type) {
+    case 'linear': {
+      const kParam = _fnParam('fn-k'); const bParam = _fnParam('fn-b');
+      if (!kParam) { err.textContent = 'k 值无法解析'; return; }
+      if (!bParam) { err.textContent = 'b 值无法解析'; return; }
+      fn.kExpr = kParam.expr; fn.k = kParam.val;
+      fn.bExpr = bParam.expr; fn.b = bParam.val;
+      const customName = document.getElementById('fn-name-linear').value.trim();
+      fn.label = customName || `y = ${kParam.expr}x + ${bParam.expr}`;
+      break;
+    }
+    case 'quadratic': {
+      const aParam = _fnParam('fn-a'); const bParam = _fnParam('fn-b2'); const cParam = _fnParam('fn-c');
+      if (!aParam) { err.textContent = 'a 值无法解析'; return; }
+      if (!bParam) { err.textContent = 'b 值无法解析'; return; }
+      if (!cParam) { err.textContent = 'c 值无法解析'; return; }
+      fn.aExpr = aParam.expr; fn.a = aParam.val;
+      fn.bExpr = bParam.expr; fn.b = bParam.val;
+      fn.cExpr = cParam.expr; fn.c = cParam.val;
+      const customName = document.getElementById('fn-name-quadratic').value.trim();
+      fn.label = customName || `y = ${aParam.expr}x² + ${bParam.expr}x + ${cParam.expr}`;
+      break;
+    }
+    case 'trig': {
+      const AParam = _fnParam('fn-A'); const kParam = _fnParam('fn-k2'); const phiParam = _fnParam('fn-phi');
+      if (!AParam) { err.textContent = '振幅 A 无法解析'; return; }
+      if (!kParam) { err.textContent = '频率 k 无法解析'; return; }
+      if (!phiParam) { err.textContent = '相位 φ 无法解析'; return; }
+      fn.AExpr = AParam.expr; fn.A = AParam.val;
+      fn.trigType = document.getElementById('fn-trig-type').value;
+      fn.kExpr = kParam.expr; fn.k = kParam.val;
+      fn.phiExpr = phiParam.expr; fn.phi = phiParam.val;
+      const customName = document.getElementById('fn-name-trig').value.trim();
+      fn.label = customName || `y = ${AParam.expr}·${fn.trigType}(${kParam.expr}x + ${phiParam.expr})`;
+      break;
+    }
+  }
+  functions.push(fn);
+  err.textContent = '';
+  draw(); renderPanel();
+  toast(`${fn.label} 已绘制`);
+}
+
+function deleteFunction(id) { functions = functions.filter(f => f.id !== id); draw(); renderPanel(); }
+
+function addCircle() {
+  const limit = checkTrialLimits('circle');
+  if (!limit.ok) { toast(limit.msg); return; }
+  const centerId = document.getElementById('circ-center').value;
+  const rExpr = document.getElementById('circ-r').value.trim();
+  const name = document.getElementById('circ-name').value.trim() || '圆' + cidCounter;
+  const err = document.getElementById('circ-error');
+  if (!centerId) { err.textContent = '请选择圆心'; return; }
+  const rVal = MathExpr.eval(rExpr);
+  if (isNaN(rVal) || !isFinite(rVal) || rVal <= 0) { err.textContent = '半径无法解析或 ≤ 0：' + rExpr; return; }
+  err.textContent = '';
+  circles.push({ id: 'c' + (++cidCounter), name, centerId, rExpr, r: rVal, color: '#f97316' });
+  draw(); renderPanel();
+}
+
+function deleteCircle(id) { circles = circles.filter(c => c.id !== id); draw(); renderPanel(); }
+
+// ============================================================
+//  Panel Rendering
+// ============================================================
+function renderPanel() {
+  // Points list
+  const ptList = document.getElementById('pt-list');
+  ptList.innerHTML = points.length === 0
+    ? '<div style="color:#94a3b8;font-size:11px;padding:4px 0">暂无点</div>'
+    : points.map(pt => {
+        const xDisp = pt.xExpr !== undefined ? MathExpr.display(pt.xExpr, 10) : MathExpr.formatNum(pt.x);
+        const yDisp = pt.yExpr !== undefined ? MathExpr.display(pt.yExpr, 10) : MathExpr.formatNum(pt.y);
+        return `<div class="pt-card">
+          <span class="card-name card-name-blue">${esc(pt.name)}</span>
+          <span class="card-info">(${xDisp}, ${yDisp})</span>
+          <button class="icon-btn" onclick="deletePoint('${pt.id}')" title="删除">✕</button>
+        </div>`;
+      }).join('');
+
+  // Segment selects
+  const ptOpts = points.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+  const prevA = document.getElementById('seg-a').value, prevB = document.getElementById('seg-b').value;
+  document.getElementById('seg-a').innerHTML = '<option value="">端A</option>' + ptOpts;
+  document.getElementById('seg-b').innerHTML = '<option value="">端B</option>' + ptOpts;
+  document.getElementById('seg-a').value = prevA; document.getElementById('seg-b').value = prevB;
+
+  // Segments list
+  const segList = document.getElementById('seg-list');
+  segList.innerHTML = segments.length === 0
+    ? '<div style="color:#94a3b8;font-size:11px;padding:4px 0">暂无线段</div>'
+    : segments.map(seg => {
+        const a = points.find(p => p.id === seg.pointAId), b = points.find(p => p.id === seg.pointBId);
+        if (!a || !b) return '';
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const len = Math.sqrt(dx*dx + dy*dy);
+        const lenStr = MathExpr.formatNum(len);
+        return `<div class="seg-card">
+          <span class="card-name card-name-red">${esc(seg.name)}</span>
+          <span class="card-info">${esc(a.name)}→${esc(b.name)} 长=${lenStr}</span>
+          <button class="icon-btn" onclick="deleteSegment('${seg.id}')">✕</button>
+        </div>`;
+      }).join('');
+
+  // Functions list
+  const fnList = document.getElementById('fn-list');
+  fnList.innerHTML = functions.length === 0
+    ? '<div style="color:#94a3b8;font-size:11px;padding:4px 0">暂无函数</div>'
+    : functions.map(fn => `<div class="fn-card">
+        <span class="card-name card-name-purple" style="color:${fn.color}">■</span>
+        <span class="card-info">${esc(fn.label)}</span>
+        <button class="icon-btn" onclick="deleteFunction('${fn.id}')">✕</button>
+      </div>`).join('');
+
+  // Circle center select
+  const prevC = document.getElementById('circ-center').value;
+  document.getElementById('circ-center').innerHTML = '<option value="">圆心</option>' + ptOpts;
+  document.getElementById('circ-center').value = prevC;
+
+  // Circles list
+  const circList = document.getElementById('circ-list');
+  circList.innerHTML = circles.length === 0
+    ? '<div style="color:#94a3b8;font-size:11px;padding:4px 0">暂无圆</div>'
+    : circles.map(c => {
+        const rDisp = c.rExpr !== undefined ? MathExpr.display(c.rExpr, 10) : MathExpr.formatNum(c.r);
+        return `<div class="circ-card">
+          <span class="card-name card-name-orange">${esc(c.name)}</span>
+          <span class="card-info">r = ${rDisp}</span>
+          <button class="icon-btn" onclick="deleteCircle('${c.id}')">✕</button>
+        </div>`;
+      }).join('');
+
+  updateTrialUI();
+}
+
+// ============================================================
+//  Function Type Toggle
+// ============================================================
+function setFnType(type) {
+  ['linear','quadratic','trig'].forEach(t => {
+    document.getElementById('fn-panel-' + t).style.display = t === type ? 'block' : 'none';
+    document.getElementById('fn-btn-' + t).classList.toggle('active', t === type);
+  });
+}
+
+// ============================================================
+//  Export Image
+// ============================================================
+function exportImage() {
+  const link = document.createElement('a');
+  link.download = '几何画板_' + new Date().toLocaleDateString('zh-CN').replace(/\//g, '-') + '.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+  toast('图片已保存！');
+}
+
+// ============================================================
+//  Upgrade Modal
+// ============================================================
+function showUpgradeModal() {
+  const html = `<div style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;display:flex;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:16px;padding:32px;max-width:380px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="font-size:48px;margin-bottom:12px;">🚀</div>
+      <h2 style="color:#1e293b;margin-bottom:8px;font-size:20px;">升级到专业版</h2>
+      <p style="color:#64748b;font-size:13px;margin-bottom:20px;">解锁所有功能，无限制使用</p>
+      <div style="background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:20px;text-align:left;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="color:#10b981">✓</span> <span style="font-size:13px;color:#374151;">无限添加点、线段、函数、圆</span></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><span style="color:#10b981">✓</span> <span style="font-size:13px;color:#374151;">导出高清 PNG 图片</span></div>
+        <div style="display:flex;align-items:center;gap:8px;"><span style="color:#10b981">✓</span> <span style="font-size:13px;color:#374151;">去除体验版水印</span></div>
+      </div>
+      <div style="background:linear-gradient(135deg,#f59e0b,#f97316);color:#fff;padding:12px;border-radius:10px;font-size:18px;font-weight:700;margin-bottom:12px;">
+        ¥9<span style="font-size:13px;font-weight:400;"> / 月</span>
+      </div>
+      <p style="color:#94a3b8;font-size:12px;margin-bottom:16px;">微信/支付宝 便捷支付</p>
+      <button onclick="document.getElementById('upgrade-modal-bg').style.display='none'" style="width:100%;padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;color:#64748b;font-size:13px;cursor:pointer;">稍后再说</button>
+    </div>
+  </div>`;
+  const div = document.createElement('div');
+  div.id = 'upgrade-modal-bg';
+  div.style.cssText = 'position:fixed;inset:0;z-index:200;';
+  div.innerHTML = html;
+  div.addEventListener('click', function(e) { if (e.target === div) div.style.display = 'none'; });
+  document.body.appendChild(div);
+}
+
+// ============================================================
+//  Utilities
+// ============================================================
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function toast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// Enter key shortcuts
+['pt-name','pt-x','pt-y'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') addPoint(); });
+});
+['seg-name'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') addSegment(); });
+});
+
+// Init
+renderPanel();
+draw();
+</script>
+</body>
+</html>
